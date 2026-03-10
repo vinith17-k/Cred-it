@@ -80,7 +80,15 @@ export default function UploadDocuments() {
       });
 
       setStep("scoring");
-      const result = await resp.json();
+
+      const text = await resp.text();
+      let result;
+      try {
+        result = JSON.parse(text);
+      } catch (err) {
+        console.error("Non-JSON response from server:", text);
+        throw new Error(`Server Error (${resp.status}): ${text ? text.slice(0, 50) + "..." : "Empty response (Timeout/Crash)"}`);
+      }
 
       if (!resp.ok || !result.success) {
         throw new Error(result.error || `Server returned ${resp.status}`);
