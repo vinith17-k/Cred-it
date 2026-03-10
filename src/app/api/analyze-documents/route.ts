@@ -1,15 +1,19 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-
-const pdfParse = require('pdf-parse');
 import Papa from 'papaparse';
 import * as xlsx from 'xlsx';
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
+// ─── OpenAI client (lazy, inside route to avoid module-level crashes) ────────
 
-// ─── Document Text Extraction ───────────────────────────────────────────────
+function getOpenAI() {
+    const key = process.env.OPENAI_API_KEY;
+    if (!key || key === 'your-openai-api-key-here') {
+        throw new Error('OPENAI_API_KEY is not configured. Please add it to your environment variables.');
+    }
+    return new OpenAI({ apiKey: key });
+}
+
+// ─── Document Text Extraction ────────────────────────────────────────────────
 
 async function extractTextFromFile(file: File): Promise<string> {
     const arrayBuffer = await file.arrayBuffer();
@@ -18,6 +22,9 @@ async function extractTextFromFile(file: File): Promise<string> {
 
     try {
         if (name.endsWith('.pdf')) {
+            // Require inside function to avoid module-level filesystem access issues on Vercel
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const pdfParse = require('pdf-parse/lib/pdf-parse');
             const pdfData = await pdfParse(buffer);
             return `[FILE: ${file.name}]\n${pdfData.text}\n`;
         }
@@ -26,8 +33,10 @@ async function extractTextFromFile(file: File): Promise<string> {
             const text = buffer.toString('utf-8');
             const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
             const rows = parsed.data as Record<string, string>[];
-            const sample = rows.slice(0, 200).map(r => Object.entries(r).map(([k, v]) => `${k}: ${v}`).join(', ')).join('\n');
-            return `[FILE: ${file.name}]\n${sample}\n`;
+            const lines = rows.slice(0, 300).map(r =>
+                Object.entries(r).map(([k, v]) => `${k}: ${v}`).join(', ')
+            ).join('\n');
+            return `[FILE: ${file.name}]\n${lines}\n`;
         }
 
         if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
@@ -37,27 +46,30 @@ async function extractTextFromFile(file: File): Promise<string> {
                 const sheet = workbook.Sheets[sheetName];
                 const rows = xlsx.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
                 text += `[Sheet: ${sheetName}]\n`;
-                text += rows.slice(0, 200).map(r => r.join('\t')).join('\n') + '\n';
+                text += rows.slice(0, 300).map(r => r.join('\t')).join('\n') + '\n';
             }
             return text;
         }
-    } catch (err) {
-        console.error(`[analyze] Failed to parse ${file.name}:`, err);
-    }
 
-    return `[FILE: ${file.name}] (could not parse)\n`;
+        // Fallback: try to read as plain text
+        return `[FILE: ${file.name}]\n${buffer.toString('utf-8').slice(0, 3000)}\n`;
+
+    } catch (err: any) {
+        console.error(`[analyze] Failed to parse ${file.name}:`, err?.message);
+        return `[FILE: ${file.name}] (parse failed: ${err?.message})\n`;
+    }
 }
 
-// ─── OpenAI Analysis ────────────────────────────────────────────────────────
+// ─── AI Prompt ──────────────────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `You are a senior financial risk analyst at a bank performing credit evaluation for a business loan.
 You will be given raw text extracted from company documents: GST returns, bank statements, annual reports, and financial statements.
-Analyze the documents carefully and return your analysis as a strict JSON object.
+Analyze the documents carefully and return ONLY a valid JSON object — no markdown, no code fences, no explanation.
 
-Return ONLY the following JSON structure with NO markdown, NO code fences, NO explanation:
+Return EXACTLY this JSON structure (fill all fields, use 0 for unknown numbers):
 
 {
-  "companyName": "string — extracted company name or 'Unknown Company'",
+  "companyName": "string",
   "financialData": {
     "revenue": 0,
     "netProfit": 0,
@@ -71,51 +83,43 @@ Return ONLY the following JSON structure with NO markdown, NO code fences, NO ex
     "promoterExperience": 0
   },
   "riskScore": {
-    "character": 0,
-    "capacity": 0,
-    "capital": 0,
-    "collateral": 0,
-    "conditions": 0,
-    "overall": 0
+    "character": 70,
+    "capacity": 65,
+    "capital": 60,
+    "collateral": 55,
+    "conditions": 70,
+    "overall": 65
   },
   "fraudAlerts": [
-    { "type": "danger|warning", "title": "string", "description": "string" }
+    { "type": "warning", "title": "string", "description": "string" }
   ],
   "loanDecision": {
-    "status": "APPROVED|CONDITIONAL|REJECTED",
+    "status": "CONDITIONAL",
     "amount": 0,
-    "interestRate": 0,
-    "riskLevel": "Very Low Risk|Low Risk|Moderate Risk|High Risk|Very High Risk",
+    "interestRate": 12.5,
+    "riskLevel": "Moderate Risk",
     "reasoning": "string"
   },
   "newsInsights": [
-    { "title": "string", "sentiment": "positive|neutral|negative", "source": "string", "date": "string" }
+    { "title": "string", "sentiment": "neutral", "source": "AI Analysis", "date": "2026-03-10" }
   ],
-  "riskInsights": ["string", "string"]
+  "riskInsights": ["string"]
 }
 
 Rules:
-- All monetary values must be in INR (numbers only, no currency symbols or commas)
-- Five Cs scores are 0–100 integers. Overall = weighted average: character(20%) + capacity(25%) + capital(20%) + collateral(15%) + conditions(20%)
-- If data for a field is missing from documents, use 0 for numbers and make reasonable inferences
-- fraudAlerts: identify real anomalies like GST vs bank deposit mismatches, circular transactions, extreme leverage, negative profit. Empty array if none found.
-- newsInsights: 3–5 key AI-generated insights about the company's financial health and risk signals
-- riskInsights: 3–5 short bullet-point strings summarizing key risk factors
-- loanDecision.amount: recommended loan amount in INR based on net worth and assets
-- loanDecision.reasoning: 2–3 sentence explanation of the decision
-`;
+- All monetary values in INR as plain numbers (no symbols, no commas)
+- Five Cs scores: integers 0–100. Overall = character*0.20 + capacity*0.25 + capital*0.20 + collateral*0.15 + conditions*0.20
+- status must be exactly: APPROVED, CONDITIONAL, or REJECTED
+- sentiment must be exactly: positive, neutral, or negative
+- type must be exactly: danger or warning
+- fraudAlerts: empty array [] if no issues found
+- riskInsights: 3–5 short bullet strings summarizing key findings
+- newsInsights: 3–4 AI-generated observations about financial health`;
 
 // ─── API Route ───────────────────────────────────────────────────────────────
 
 export async function POST(req: Request) {
     try {
-        if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'your-openai-api-key-here') {
-            return NextResponse.json(
-                { success: false, error: 'OpenAI API key not configured. Please add OPENAI_API_KEY to your environment variables.' },
-                { status: 500 }
-            );
-        }
-
         const formData = await req.formData();
         const files: File[] = [];
 
@@ -135,46 +139,55 @@ export async function POST(req: Request) {
         const textParts = await Promise.all(files.map(extractTextFromFile));
         let combinedText = textParts.join('\n\n');
 
-        // Truncate to ~12,000 chars to stay within token limits
-        if (combinedText.length > 12000) {
-            combinedText = combinedText.slice(0, 12000) + '\n\n[... content truncated for analysis ...]';
+        // Trim to ~10,000 chars to stay well within token limits and avoid timeouts
+        if (combinedText.length > 10000) {
+            combinedText = combinedText.slice(0, 10000) + '\n\n[... content truncated for analysis ...]';
         }
 
-        console.log(`[AI] Total extracted text: ${combinedText.length} chars`);
+        console.log(`[AI] Total extracted text: ${combinedText.length} chars. Calling OpenAI...`);
 
         // 2. Call OpenAI
+        const openai = getOpenAI();
         const completion = await openai.chat.completions.create({
             model: 'gpt-4o-mini',
             response_format: { type: 'json_object' },
-            temperature: 0.2,
+            temperature: 0.1,
+            max_tokens: 1500,
             messages: [
                 { role: 'system', content: SYSTEM_PROMPT },
                 {
                     role: 'user',
-                    content: `Analyze the following company documents and return your credit risk analysis as JSON:\n\n${combinedText}`,
+                    content: `Analyze the following extracted document text and return your credit risk analysis as a JSON object:\n\n${combinedText}`,
                 },
             ],
         });
 
-        const rawJson = completion.choices[0]?.message?.content ?? '{}';
-        console.log(`[AI] Raw OpenAI response length: ${rawJson.length}`);
+        const rawJson = completion.choices[0]?.message?.content ?? '';
+        console.log(`[AI] OpenAI response: ${rawJson.length} chars`);
 
-        let analysis: any;
-        try {
-            analysis = JSON.parse(rawJson);
-        } catch {
-            console.error('[AI] Failed to parse OpenAI JSON:', rawJson);
+        if (!rawJson || rawJson.trim().length === 0) {
             return NextResponse.json(
-                { success: false, error: 'AI returned invalid response. Please try again.' },
+                { success: false, error: 'AI returned an empty response. Please try again.' },
                 { status: 500 }
             );
         }
 
-        // 3. Normalize and validate
+        let analysis: any;
+        try {
+            analysis = JSON.parse(rawJson);
+        } catch (parseErr) {
+            console.error('[AI] JSON parse error. Raw:', rawJson.slice(0, 500));
+            return NextResponse.json(
+                { success: false, error: 'AI returned malformed JSON. Please try again.' },
+                { status: 500 }
+            );
+        }
+
+        // 3. Normalize response
         const today = new Date().toISOString().split('T')[0];
 
         const financialData = {
-            companyName: analysis.companyName || 'Unknown Company',
+            companyName: String(analysis.companyName || 'Uploaded Company'),
             revenue: Number(analysis.financialData?.revenue) || 0,
             netProfit: Number(analysis.financialData?.netProfit) || 0,
             totalDebt: Number(analysis.financialData?.totalDebt) || 0,
@@ -187,53 +200,55 @@ export async function POST(req: Request) {
             promoterExperience: Number(analysis.financialData?.promoterExperience) || 0,
         };
 
+        const clamp = (n: number) => Math.min(100, Math.max(0, Math.round(Number(n) || 50)));
         const riskScore = {
-            character: Math.min(100, Math.max(0, Number(analysis.riskScore?.character) || 50)),
-            capacity: Math.min(100, Math.max(0, Number(analysis.riskScore?.capacity) || 50)),
-            capital: Math.min(100, Math.max(0, Number(analysis.riskScore?.capital) || 50)),
-            collateral: Math.min(100, Math.max(0, Number(analysis.riskScore?.collateral) || 50)),
-            conditions: Math.min(100, Math.max(0, Number(analysis.riskScore?.conditions) || 50)),
-            overall: Math.min(100, Math.max(0, Number(analysis.riskScore?.overall) || 50)),
+            character: clamp(analysis.riskScore?.character),
+            capacity: clamp(analysis.riskScore?.capacity),
+            capital: clamp(analysis.riskScore?.capital),
+            collateral: clamp(analysis.riskScore?.collateral),
+            conditions: clamp(analysis.riskScore?.conditions),
+            overall: clamp(analysis.riskScore?.overall),
         };
 
+        const validStatuses = ['APPROVED', 'CONDITIONAL', 'REJECTED'];
         const loanDecision = {
-            status: (['APPROVED', 'CONDITIONAL', 'REJECTED'].includes(analysis.loanDecision?.status)
+            status: (validStatuses.includes(analysis.loanDecision?.status)
                 ? analysis.loanDecision.status
                 : 'CONDITIONAL') as 'APPROVED' | 'CONDITIONAL' | 'REJECTED',
             amount: Math.max(0, Number(analysis.loanDecision?.amount) || 0),
-            interestRate: Number(analysis.loanDecision?.interestRate) || 12,
-            riskLevel: analysis.loanDecision?.riskLevel || 'Moderate Risk',
-            reasoning: analysis.loanDecision?.reasoning || 'Analysis complete.',
+            interestRate: Number(analysis.loanDecision?.interestRate) || 12.5,
+            riskLevel: String(analysis.loanDecision?.riskLevel || 'Moderate Risk'),
+            reasoning: String(analysis.loanDecision?.reasoning || 'Analysis complete.'),
         };
 
         const fraudAlerts = (Array.isArray(analysis.fraudAlerts) ? analysis.fraudAlerts : [])
-            .filter((a: any) => a && a.title && a.description)
+            .filter((a: any) => a?.title && a?.description)
             .map((a: any) => ({
-                type: a.type === 'danger' ? 'danger' : 'warning' as 'danger' | 'warning',
+                type: (a.type === 'danger' ? 'danger' : 'warning') as 'danger' | 'warning',
                 title: String(a.title),
                 description: String(a.description),
             }));
 
+        const validSentiments = ['positive', 'neutral', 'negative'];
         const newsInsights = (Array.isArray(analysis.newsInsights) ? analysis.newsInsights : [])
-            .filter((n: any) => n && n.title)
+            .filter((n: any) => n?.title)
             .map((n: any) => ({
                 title: String(n.title),
-                sentiment: (['positive', 'neutral', 'negative'].includes(n.sentiment) ? n.sentiment : 'neutral') as 'positive' | 'neutral' | 'negative',
+                sentiment: (validSentiments.includes(n.sentiment) ? n.sentiment : 'neutral') as 'positive' | 'neutral' | 'negative',
                 source: String(n.source || 'AI Analysis Engine'),
                 date: String(n.date || today),
             }));
 
         const riskInsights: string[] = (Array.isArray(analysis.riskInsights) ? analysis.riskInsights : [])
             .filter((r: any) => typeof r === 'string' && r.trim().length > 0)
-            .map((r: any) => String(r));
+            .map(String);
 
-        // Determine extraction confidence based on how many financial fields are non-zero
-        const nonZeroFields = ['revenue', 'netProfit', 'totalDebt', 'cashFlow', 'totalAssets', 'liabilities']
+        const nonZeroCount = ['revenue', 'netProfit', 'totalDebt', 'cashFlow', 'totalAssets', 'liabilities']
             .filter(f => (financialData as any)[f] > 0).length;
         const extractionConfidence: 'high' | 'medium' | 'low' =
-            nonZeroFields >= 5 ? 'high' : nonZeroFields >= 3 ? 'medium' : 'low';
+            nonZeroCount >= 5 ? 'high' : nonZeroCount >= 3 ? 'medium' : 'low';
 
-        console.log(`[AI] Confidence: ${extractionConfidence} | Score: ${riskScore.overall} | Decision: ${loanDecision.status}`);
+        console.log(`[AI] Done. Confidence: ${extractionConfidence} | Score: ${riskScore.overall} | Decision: ${loanDecision.status}`);
 
         return NextResponse.json({
             success: true,
@@ -248,11 +263,11 @@ export async function POST(req: Request) {
 
     } catch (error: any) {
         console.error('[AI] Fatal error:', error?.message || error);
+        // Always return valid JSON so the frontend can parse it
         return NextResponse.json(
             {
                 success: false,
-                error: 'AI analysis failed. Please check your API key and try again.',
-                detail: error?.message || 'Unknown error',
+                error: error?.message || 'AI analysis failed. Please check your API key and try again.',
             },
             { status: 500 }
         );
