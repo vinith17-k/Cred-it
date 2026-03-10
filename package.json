@@ -51,6 +51,7 @@
     "lucide-react": "^0.462.0",
     "next": "^16.1.6",
     "next-themes": "^0.3.0",
+    "openai": "^6.27.0",
     "papaparse": "^5.5.3",
     "pdf-lib": "^1.17.1",
     "pdf-parse": "^2.4.5",

@@ -54,6 +54,7 @@ export interface CreditState {
   riskScore: RiskScore | null;
   loanDecision: LoanDecision | null;
   newsInsights: NewsInsight[];
+  riskInsights: string[];
   uploadedFiles: string[];
   officerNotes: string;
   setFinancialData: (data: FinancialData) => void;
@@ -61,6 +62,7 @@ export interface CreditState {
   setRiskScore: (score: RiskScore) => void;
   setLoanDecision: (decision: LoanDecision) => void;
   setNewsInsights: (insights: NewsInsight[]) => void;
+  setRiskInsights: (insights: string[]) => void;
   setUploadedFiles: (files: string[]) => void;
   setOfficerNotes: (notes: string) => void;
   setIsAnalyzed: (v: boolean) => void;
@@ -83,16 +85,17 @@ export function CreditProvider({ children }: { children: ReactNode }) {
   const [riskScore, setRiskScore] = useState<RiskScore | null>(null);
   const [loanDecision, setLoanDecision] = useState<LoanDecision | null>(null);
   const [newsInsights, setNewsInsights] = useState<NewsInsight[]>([]);
+  const [riskInsights, setRiskInsights] = useState<string[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
   const [officerNotes, setOfficerNotes] = useState("");
 
   return (
     <CreditContext.Provider
       value={{
-        isAnalyzed, extractionConfidence, financialData, fraudAlerts, riskScore, loanDecision, newsInsights,
-        uploadedFiles, officerNotes,
+        isAnalyzed, extractionConfidence, financialData, fraudAlerts, riskScore, loanDecision,
+        newsInsights, riskInsights, uploadedFiles, officerNotes,
         setFinancialData, setFraudAlerts, setRiskScore, setLoanDecision, setNewsInsights,
-        setUploadedFiles, setOfficerNotes, setIsAnalyzed, setExtractionConfidence,
+        setRiskInsights, setUploadedFiles, setOfficerNotes, setIsAnalyzed, setExtractionConfidence,
       }}
     >
       {children}

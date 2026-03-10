@@ -29,7 +29,7 @@ const stepLabels: Record<AnalysisStep, string> = {
   idle: "",
   uploading: "Uploading documents...",
   parsing: "Parsing financial data (PDF/CSV/Excel)...",
-  scoring: "Computing risk score & loan decision...",
+  scoring: "Running AI analysis via OpenAI...",
   done: "Analysis complete!",
   error: "Processing failed",
 };
@@ -43,6 +43,7 @@ export default function UploadDocuments() {
     setRiskScore,
     setLoanDecision,
     setNewsInsights,
+    setRiskInsights,
     setExtractionConfidence,
   } = useCreditStore();
 
@@ -73,7 +74,7 @@ export default function UploadDocuments() {
 
     try {
       setStep("parsing");
-      const resp = await fetch("/api/process-documents", {
+      const resp = await fetch("/api/analyze-documents", {
         method: "POST",
         body: formData,
       });
@@ -85,12 +86,13 @@ export default function UploadDocuments() {
         throw new Error(result.error || `Server returned ${resp.status}`);
       }
 
-      // Store all real data from the API into global context
+      // Store all AI-generated data from the API into global context
       setFinancialData(result.financialData);
-      setFraudAlerts(result.fraudAlerts);
+      setFraudAlerts(result.fraudAlerts ?? []);
       setRiskScore(result.riskScore);
       setLoanDecision(result.loanDecision);
-      setNewsInsights(result.newsInsights);
+      setNewsInsights(result.newsInsights ?? []);
+      setRiskInsights(result.riskInsights ?? []);
       setUploadedFiles(Object.keys(files).filter((k) => files[k] !== null));
       setExtractionConfidence(result.extractionConfidence || "medium");
       setIsAnalyzed(true);
@@ -196,7 +198,7 @@ export default function UploadDocuments() {
               <p className="text-sm font-medium text-foreground">{stepLabels[step]}</p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {step === "parsing" && "Reading PDF text, CSV columns, and Excel rows..."}
-                {step === "scoring" && "Running fraud detection and Five Cs credit model..."}
+                {step === "scoring" && "Sending data to OpenAI for AI-powered credit analysis..."}
                 {step === "uploading" && "Sending files to processing server..."}
               </p>
             </div>

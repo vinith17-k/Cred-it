@@ -32,3 +32,5 @@ build-log*.txt
 *.njsproj
 *.sln
 *.sw?
+
+.vercel

@@ -7,7 +7,7 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  serverExternalPackages: ['pdf-parse']
+  serverExternalPackages: ['pdf-parse', 'openai']
 }
 
 export default nextConfig;
