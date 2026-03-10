@@ -1,0 +1,137 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 222 20% 97%;
+    --foreground: 220 20% 16%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 20% 16%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 20% 16%;
+
+    --primary: 231 60% 68%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 222 20% 94%;
+    --secondary-foreground: 220 20% 30%;
+
+    --muted: 222 18% 93%;
+    --muted-foreground: 220 10% 46%;
+
+    --accent: 264 52% 72%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 222 15% 90%;
+    --input: 222 15% 90%;
+    --ring: 231 60% 68%;
+
+    --radius: 1rem;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 220 20% 30%;
+    --sidebar-primary: 231 60% 68%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 231 60% 96%;
+    --sidebar-accent-foreground: 231 60% 50%;
+    --sidebar-border: 222 15% 92%;
+    --sidebar-ring: 231 60% 68%;
+
+    --success: 168 60% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 55%;
+    --warning-foreground: 0 0% 100%;
+    --info: 210 80% 56%;
+    --info-foreground: 0 0% 100%;
+
+    --gradient-start: 222 80% 72%;
+    --gradient-end: 264 60% 68%;
+
+    --chart-1: 231 60% 68%;
+    --chart-2: 264 52% 72%;
+    --chart-3: 168 60% 45%;
+    --chart-4: 0 72% 55%;
+    --chart-5: 210 80% 56%;
+  }
+
+  .dark {
+    --background: 222 30% 8%;
+    --foreground: 220 15% 92%;
+    --card: 222 25% 12%;
+    --card-foreground: 220 15% 92%;
+    --popover: 222 25% 12%;
+    --popover-foreground: 220 15% 92%;
+    --primary: 231 60% 68%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 222 25% 18%;
+    --secondary-foreground: 220 15% 85%;
+    --muted: 222 25% 16%;
+    --muted-foreground: 220 10% 55%;
+    --accent: 264 52% 72%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 62% 40%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 222 25% 20%;
+    --input: 222 25% 20%;
+    --ring: 231 60% 68%;
+    --sidebar-background: 222 30% 10%;
+    --sidebar-foreground: 220 15% 85%;
+    --sidebar-primary: 231 60% 68%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 25% 16%;
+    --sidebar-accent-foreground: 231 60% 75%;
+    --sidebar-border: 222 25% 18%;
+    --sidebar-ring: 231 60% 68%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', 'Poppins', system-ui, sans-serif;
+  }
+}
+
+@layer utilities {
+  .glass-card {
+    @apply bg-card rounded-2xl border border-border/50 shadow-sm hover:shadow-md transition-all duration-300;
+  }
+  .glass-card:hover {
+    transform: translateY(-2px);
+  }
+  .gradient-primary {
+    background: linear-gradient(135deg, hsl(222, 80%, 72%), hsl(264, 60%, 68%));
+  }
+  .gradient-primary-soft {
+    background: linear-gradient(135deg, hsl(222, 80%, 72%, 0.1), hsl(264, 60%, 68%, 0.1));
+  }
+  .gradient-navy {
+    background: linear-gradient(135deg, hsl(231, 60%, 68%), hsl(264, 52%, 72%));
+  }
+  .gradient-gold {
+    background: linear-gradient(135deg, hsl(231, 60%, 68%), hsl(264, 52%, 72%));
+  }
+  .risk-gauge-safe {
+    --gauge-color: hsl(168, 60%, 45%);
+  }
+  .risk-gauge-low {
+    --gauge-color: hsl(210, 80%, 56%);
+  }
+  .risk-gauge-moderate {
+    --gauge-color: hsl(38, 92%, 55%);
+  }
+  .risk-gauge-high {
+    --gauge-color: hsl(0, 72%, 55%);
+  }
+}
